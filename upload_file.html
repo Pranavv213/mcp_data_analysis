@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CSV Upload</title>
+</head>
+<body>
+
+  <h2>Upload CSV File</h2>
+
+  <input type="file" id="fileInput" />
+  <button onclick="uploadFile()">Upload</button>
+
+  <p id="status"></p>
+
+  <script>
+    async function uploadFile() {
+      const fileInput = document.getElementById("fileInput");
+      const status = document.getElementById("status");
+
+      if (!fileInput.files.length) {
+        status.innerText = "Please select a file first.";
+        return;
+      }
+
+      const file = fileInput.files[0];
+
+      const formData = new FormData();
+      formData.append("file", file);  // IMPORTANT: must match FastAPI parameter name
+
+      try {
+        const response = await fetch("http://127.0.0.1:8001/upload", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await response.json();
+        status.innerText = "Upload successful: " + data.filename;
+
+        console.log(data);
+      } catch (error) {
+        console.error(error);
+        status.innerText = "Upload failed";
+      }
+    }
+  </script>
+
+</body>
+</html>

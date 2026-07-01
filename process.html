@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📊 Data Analysis Agent · Chat</title>
+  <!-- Font Awesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    }
+
+    body {
+      background: linear-gradient(145deg, #f6f9fc 0%, #e9f2f9 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .chat-container {
+      max-width: 900px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 2.5rem;
+      box-shadow: 0 20px 40px -12px rgba(0, 20, 30, 0.25), 0 4px 18px rgba(0,0,0,0.05);
+      padding: 1.8rem 2rem 2rem;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      transition: all 0.2s ease;
+    }
+
+    h1 {
+      font-size: 1.9rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      color: #0b2b3f;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.1rem;
+    }
+    h1 i {
+      color: #2a7faa;
+      font-size: 2rem;
+    }
+    .subhead {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.8rem;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+      border-bottom: 1px solid rgba(0,0,0,0.05);
+      padding-bottom: 0.6rem;
+    }
+    .thread-badge {
+      background: #d4e3ed;
+      padding: 0.3rem 1.2rem;
+      border-radius: 40px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #144a66;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .thread-badge i {
+      font-size: 0.8rem;
+      opacity: 0.8;
+    }
+
+    /* status chip */
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #e3eef6;
+      padding: 0.25rem 1rem 0.25rem 0.8rem;
+      border-radius: 30px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #1b4f6e;
+      border: 1px solid rgba(42, 127, 170, 0.15);
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 10px;
+      background: #2a7faa;
+      display: inline-block;
+      transition: 0.3s;
+    }
+    .status-dot.loaded {
+      background: #1f9d8a;
+      box-shadow: 0 0 0 2px rgba(31, 157, 138, 0.2);
+    }
+    .status-dot.idle {
+      background: #b0c9d9;
+    }
+
+    /* chat messages */
+    .messages-box {
+      background: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border-radius: 1.8rem;
+      padding: 1.6rem 1.2rem;
+      max-height: 420px;
+      min-height: 280px;
+      overflow-y: auto;
+      margin: 1.2rem 0 1.5rem;
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: inset 0 2px 6px rgba(0,0,0,0.02);
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+      scroll-behavior: smooth;
+    }
+
+    .message {
+      padding: 0.8rem 1.2rem;
+      border-radius: 2rem;
+      max-width: 85%;
+      line-height: 1.5;
+      font-size: 0.95rem;
+      word-break: break-word;
+      animation: fadeSlide 0.25s ease-out;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+    }
+    .message.user {
+      background: #d7e7f5;
+      align-self: flex-end;
+      border-bottom-right-radius: 0.6rem;
+      color: #103d55;
+      border: 1px solid rgba(42, 127, 170, 0.15);
+    }
+    .message.assistant {
+      background: #ffffff;
+      align-self: flex-start;
+      border-bottom-left-radius: 0.6rem;
+      color: #1e2f3c;
+      border: 1px solid #e2edf5;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.02);
+    }
+    .message .msg-meta {
+      font-size: 0.65rem;
+      opacity: 0.5;
+      margin-top: 0.3rem;
+      letter-spacing: 0.2px;
+    }
+
+    @keyframes fadeSlide {
+      0% { opacity: 0.3; transform: translateY(4px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+
+    .input-area {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      background: white;
+      padding: 0.2rem 0.2rem 0.2rem 1.4rem;
+      border-radius: 60px;
+      border: 1px solid #cddee9;
+      box-shadow: 0 6px 14px rgba(0, 20, 30, 0.04);
+      transition: 0.2s;
+    }
+    .input-area:focus-within {
+      border-color: #2a7faa;
+      box-shadow: 0 6px 16px rgba(42, 127, 170, 0.12);
+    }
+    .input-area input {
+      flex: 1;
+      border: none;
+      padding: 0.9rem 0;
+      font-size: 0.95rem;
+      background: transparent;
+      outline: none;
+      color: #1e3a4b;
+    }
+    .input-area input::placeholder {
+      color: #8aaec2;
+      font-weight: 400;
+    }
+    .input-area button {
+      background: #1d5c7a;
+      border: none;
+      color: white;
+      font-weight: 500;
+      padding: 0.7rem 1.6rem;
+      border-radius: 40px;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      transition: 0.15s;
+      box-shadow: 0 4px 8px rgba(26, 80, 110, 0.2);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .input-area button:hover {
+      background: #134b63;
+      transform: scale(1.01);
+      box-shadow: 0 8px 16px rgba(26, 80, 110, 0.25);
+    }
+    .input-area button:active {
+      transform: scale(0.97);
+    }
+    .input-area button i {
+      font-size: 0.9rem;
+    }
+
+    .thread-controls {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 1.2rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .thread-controls .label {
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: #2c5d7a;
+      opacity: 0.8;
+      margin-right: 0.2rem;
+    }
+    .thread-input {
+      background: white;
+      border: 1px solid #d2e0e9;
+      border-radius: 40px;
+      padding: 0.4rem 1rem;
+      font-size: 0.85rem;
+      flex: 1;
+      min-width: 140px;
+      outline: none;
+      color: #11364b;
+      transition: 0.15s;
+    }
+    .thread-input:focus {
+      border-color: #2a7faa;
+      box-shadow: 0 0 0 3px rgba(42, 127, 170, 0.1);
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid #b8cfdf;
+      padding: 0.4rem 1.2rem;
+      border-radius: 30px;
+      font-weight: 500;
+      color: #1f5775;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .btn-outline:hover {
+      background: #e3eef6;
+      border-color: #7faec9;
+    }
+
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+      font-size: 0.8rem;
+      color: #2a5a76;
+      padding: 0.3rem 0.2rem;
+      border-top: 1px solid rgba(0,0,0,0.03);
+    }
+    .status-bar span i {
+      margin-right: 0.3rem;
+      opacity: 0.7;
+    }
+    .col-tag {
+      background: #e0eef8;
+      padding: 0.15rem 0.6rem;
+      border-radius: 30px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: #1a4b65;
+      display: inline-block;
+      margin: 0.1rem 0.15rem;
+    }
+
+    .empty-state {
+      color: #6b91aa;
+      font-style: italic;
+      padding: 1.2rem 0.6rem;
+      text-align: center;
+      opacity: 0.6;
+      font-size: 0.9rem;
+    }
+
+    /* scroll */
+    .messages-box::-webkit-scrollbar {
+      width: 6px;
+    }
+    .messages-box::-webkit-scrollbar-track {
+      background: rgba(0,0,0,0.02);
+      border-radius: 10px;
+    }
+    .messages-box::-webkit-scrollbar-thumb {
+      background: #b6d0e0;
+      border-radius: 10px;
+    }
+
+    @media (max-width: 600px) {
+      .chat-container { padding: 1.2rem; }
+      .input-area { flex-wrap: wrap; background: transparent; padding: 0; border: none; box-shadow: none; gap: 0.5rem; }
+      .input-area input { background: white; padding: 0.9rem 1.2rem; border-radius: 40px; border: 1px solid #cddee9; width: 100%; }
+      .input-area button { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+<div class="chat-container">
+  <h1>
+    <i class="fas fa-robot"></i> Data Analyst
+    <span style="font-size: 0.7rem; font-weight: 400; margin-left: auto; background: #dce8f0; padding: 0.2rem 0.9rem; border-radius: 30px; color: #1b4f6e;">
+      <i class="fas fa-code-branch"></i> v1.0
+    </span>
+  </h1>
+  <div class="subhead">
+    <div class="thread-badge">
+      <i class="fas fa-fingerprint"></i> Thread: <span id="threadDisplay">default</span>
+    </div>
+    <div class="status-chip" id="statusChip">
+      <span class="status-dot idle" id="statusDot"></span>
+      <span id="statusLabel">Idle</span>
+    </div>
+  </div>
+
+  <!-- messages -->
+  <div class="messages-box" id="messageBox">
+    <div class="empty-state">
+      <i class="fas fa-comment-dots" style="margin-right: 6px;"></i> 
+      Ask about data, load CSV, or generate visualizations.
+    </div>
+  </div>
+
+  <!-- input -->
+  <div class="input-area">
+    <input type="text" id="queryInput" placeholder="e.g. load sales.csv, show columns, plot bar..." />
+    <button id="sendBtn"><i class="fas fa-paper-plane"></i> Send</button>
+  </div>
+
+  <!-- thread controls + quick actions -->
+  <div class="thread-controls">
+    <span class="label"><i class="fas fa-tag"></i> Thread ID</span>
+    <input type="text" class="thread-input" id="threadInput" value="default" placeholder="thread-id" />
+    <button class="btn-outline" id="resetThreadBtn"><i class="fas fa-sync-alt"></i> Reset</button>
+    <button class="btn-outline" id="clearChatBtn" style="margin-left: auto;"><i class="fas fa-eraser"></i> Clear</button>
+  </div>
+
+  <!-- status bar with columns -->
+  <div class="status-bar">
+    <span><i class="fas fa-database"></i> Data: <strong id="dataLoadedStatus">—</strong></span>
+    <span><i class="fas fa-columns"></i> Columns: <span id="columnsDisplay">—</span></span>
+  </div>
+</div>
+
+<script>
+  (function() {
+    "use strict";
+
+    // DOM refs
+    const messageBox = document.getElementById('messageBox');
+    const queryInput = document.getElementById('queryInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const threadInput = document.getElementById('threadInput');
+    const resetThreadBtn = document.getElementById('resetThreadBtn');
+    const clearChatBtn = document.getElementById('clearChatBtn');
+    const threadDisplay = document.getElementById('threadDisplay');
+    const statusDot = document.getElementById('statusDot');
+    const statusLabel = document.getElementById('statusLabel');
+    const dataLoadedStatus = document.getElementById('dataLoadedStatus');
+    const columnsDisplay = document.getElementById('columnsDisplay');
+
+    // API base (adjust if backend is not on localhost:8000)
+    const API_BASE = 'http://localhost:8001';
+
+    // simple message store for UI
+    let currentThreadId = 'default';
+
+    // helper: set status chip
+    function setStatus(loaded, columns) {
+      if (loaded) {
+        statusDot.className = 'status-dot loaded';
+        statusLabel.innerText = 'Data ready';
+        dataLoadedStatus.innerText = '✅ Loaded';
+      } else {
+        statusDot.className = 'status-dot idle';
+        statusLabel.innerText = 'Idle';
+        dataLoadedStatus.innerText = '⏳ Not loaded';
+      }
+      if (columns && columns.length) {
+        columnsDisplay.innerHTML = columns.map(c => `<span class="col-tag">${c}</span>`).join(' ');
+      } else {
+        columnsDisplay.innerText = '—';
+      }
+    }
+
+    // add message to UI
+    function appendMessage(role, content) {
+      // remove empty-state if present
+      const empty = messageBox.querySelector('.empty-state');
+      if (empty) empty.remove();
+
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `message ${role}`;
+      const contentSpan = document.createElement('div');
+      contentSpan.innerText = content;
+      msgDiv.appendChild(contentSpan);
+      // optional meta
+      const meta = document.createElement('div');
+      meta.className = 'msg-meta';
+      const now = new Date();
+      meta.innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      msgDiv.appendChild(meta);
+      messageBox.appendChild(msgDiv);
+      messageBox.scrollTop = messageBox.scrollHeight;
+    }
+
+    // clear chat (UI only)
+    function clearChat() {
+      messageBox.innerHTML = `<div class="empty-state"><i class="fas fa-comment-dots" style="margin-right: 6px;"></i> Start a new conversation.</div>`;
+    }
+
+    // reset thread: update thread id, clear chat, reset status
+    function resetThread(newThreadId) {
+      if (newThreadId) {
+        currentThreadId = newThreadId;
+        threadInput.value = newThreadId;
+        threadDisplay.innerText = newThreadId;
+      } else {
+        // generate random thread
+        const rand = 'thread-' + Math.random().toString(36).substring(2, 8);
+        currentThreadId = rand;
+        threadInput.value = rand;
+        threadDisplay.innerText = rand;
+      }
+      clearChat();
+      setStatus(false, []);
+      // also reset server state? the server will create new thread on next message.
+    }
+
+    // send query to backend
+    async function sendQuery() {
+      const query = queryInput.value.trim();
+      if (!query) {
+        queryInput.focus();
+        return;
+      }
+
+      // get thread id from input
+      const threadId = threadInput.value.trim() || 'default';
+      if (threadId !== currentThreadId) {
+        currentThreadId = threadId;
+        threadDisplay.innerText = threadId;
+        // optional: clear chat on thread change? we keep it, but user can clear manually.
+      }
+
+      // show user message
+      appendMessage('user', query);
+      queryInput.value = '';
+      queryInput.disabled = true;
+      sendBtn.disabled = true;
+      sendBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i>';
+
+      try {
+        const resp = await fetch(`${API_BASE}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            query: query,
+            thread_id: currentThreadId
+          })
+        });
+
+        if (!resp.ok) {
+          const errText = await resp.text();
+          throw new Error(`Server error (${resp.status}): ${errText.slice(0, 100)}`);
+        }
+
+        const data = await resp.json();
+        // data: { response, thread_id, data_loaded, columns }
+        if (data.response) {
+          appendMessage('assistant', data.response);
+        } else {
+          appendMessage('assistant', '⚠️ No response from agent.');
+        }
+
+        // update status from server response
+        const loaded = data.data_loaded || false;
+        const cols = data.columns || [];
+        setStatus(loaded, cols);
+
+        // if thread changed by server? we trust server but keep our thread display
+        if (data.thread_id && data.thread_id !== currentThreadId) {
+          currentThreadId = data.thread_id;
+          threadInput.value = data.thread_id;
+          threadDisplay.innerText = data.thread_id;
+        }
+
+      } catch (err) {
+        console.error('Chat error:', err);
+        appendMessage('assistant', `❌ Error: ${err.message || 'Could not reach agent API. Ensure server is running on port 8000.'}`);
+        // keep status as is
+      } finally {
+        queryInput.disabled = false;
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+        queryInput.focus();
+      }
+    }
+
+    // --- event listeners ---
+    sendBtn.addEventListener('click', sendQuery);
+    queryInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendQuery();
+      }
+    });
+
+    resetThreadBtn.addEventListener('click', () => {
+      const newId = prompt('Enter new thread ID (or leave blank for random):', '');
+      if (newId === null) return; // cancel
+      resetThread(newId.trim() || undefined);
+    });
+
+    clearChatBtn.addEventListener('click', clearChat);
+
+    // thread input manual change -> update display, but don't reset chat
+    threadInput.addEventListener('change', () => {
+      const val = threadInput.value.trim() || 'default';
+      currentThreadId = val;
+      threadDisplay.innerText = val;
+    });
+
+    // initial status
+    setStatus(false, []);
+
+    // on load, set thread display
+    threadDisplay.innerText = currentThreadId;
+
+    // small welcome from assistant (only if empty)
+    setTimeout(() => {
+      if (messageBox.querySelector('.empty-state')) {
+        appendMessage('assistant', '👋 Hello! I’m your data analysis agent. Load a CSV with `load_csv("filename.csv")` or ask about data.');
+      }
+    }, 300);
+  })();
+</script>
+</body>
+</html>

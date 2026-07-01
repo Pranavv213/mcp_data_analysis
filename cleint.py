@@ -1,223 +1,205 @@
 import asyncio
+from contextlib import asynccontextmanager
 import os
-import sys
-from langchain.agents import create_agent
+import re
+from typing import Dict, List, Optional
+from pydantic import BaseModel
+
+from fastapi import FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+
+# LangChain / LangGraph imports
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_ollama import ChatOllama
+from langgraph.checkpoint.memory import MemorySaver
+from langchain_core.messages import SystemMessage
+
+# Prebuilt agent and structural state class tracking
+from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt.chat_agent_executor import AgentState as LangGraphAgentState
 
 
-class DataAnalysisAgent:
+# 1. Inherit from LangGraph's Base AgentState to automatically include 'remaining_steps'
+class AgentState(LangGraphAgentState):
+    data_loaded: bool
+    columns: list[str]
+    dataset_path: Optional[str]
+
+
+class ApplicationContext:
     def __init__(self):
-        self.data_loaded = False
-        self.columns = []
-        self.dataset_path = None
-        self.messages = []
-        self.agent = None
-        self.tools = []
-        self.client = None
-        
-    async def initialize(self):
-        """Initialize the agent with MCP server connection"""
-        try:
-            # Connect to MCP Server
-            self.client = MultiServerMCPClient(
-                {
-                    "data-analysis": {
-                        "command": "python",
-                        "args": ["server.py"],
-                        "transport": "stdio",
-                        "env": {
-                            "PYTHONUNBUFFERED": "1",
-                        }
-                    }
-                }
-            )
-            
-            print("⏳ Connecting to MCP server...")
-            self.tools = await asyncio.wait_for(
-                self.client.get_tools(),
-                timeout=30.0
-            )
-            
-            print("\n✅ Loaded Tools:")
-            tool_names = []
-            for tool in self.tools:
-                print(f"  • {tool.name}")
-                tool_names.append(tool.name)
-            
-            # Initialize LLM
-            llm = ChatOllama(
-                model="llama3.2:3b",
-                temperature=0,
-                timeout=60,
-            )
-            
-            # Create agent
-            self.agent = create_agent(
-                model=llm,
-                tools=self.tools,
-                system_prompt=self._get_system_prompt()
-            )
-            
-            print("\n✅ Agent initialized successfully!")
-            
-        except asyncio.TimeoutError:
-            print("\n❌ Connection timeout: MCP server took too long to respond")
-            raise
-        except Exception as e:
-            print(f"\n❌ Failed to initialize agent: {e}")
-            raise
-    
-    def _get_system_prompt(self):
-        """Generate dynamic system prompt based on current state"""
-        return f"""
-You are a data analysis assistant with comprehensive visualization capabilities.
+        self.mcp_client: Optional[MultiServerMCPClient] = None
+        self.tools: List = []
+        self.agent_executor = None
+        self.memory = MemorySaver()
 
-**CURRENT SESSION STATE:**
-- Data Loaded: {self.data_loaded}
-- Columns: {', '.join(self.columns) if self.columns else 'Not loaded yet'}
+    def dynamic_prompt_builder(self, state: AgentState) -> list:
+        """
+        Runs dynamically on every turn, injecting persistent state parameters 
+        from the checkpointer thread directly into the LLM system prompt context.
+        """
+        data_loaded = state.get("data_loaded", False)
+        columns = state.get("columns", [])
+        dataset_path = state.get("dataset_path", "None")
+        
+        system_prompt = f"""You are a data analysis assistant with comprehensive visualization capabilities.
+
+**CURRENT SESSION TRUTHS (MANAGED BY YOUR MEMORY CHECKPOINTER):**
+- Data Loaded: {data_loaded}
+- Target Dataset Path: {dataset_path}
+- Columns: {', '.join(columns) if columns else 'Not loaded yet'}
+
+**CRITICAL MEMORY DIRECTION:**
+You have a persistent thread memory. If "Data Loaded" above is True, the file is already active in memory. DO NOT execute load_csv() or ask the user to load it again unless they explicitly request a completely new file.
+
+**IMPORTANT WORKFLOW:**
+1. When a user asks about data analysis, FIRST check if data is loaded.
+2. If data is NOT loaded, suggest loading a CSV file using load_csv().
+3. If data IS loaded, analyze the column names first using get_columns().
 
 **AVAILABLE TOOLS:**
-1. load_csv() - Load a CSV file
-2. get_columns() - Get all column names
-3. summary() - Get dataset summary
-4. average() - Calculate average of a column
-5. maximum() - Find maximum value
-6. plot_bar() - Create bar chart
-7. plot_histogram() - Create histogram
-8. plot_scatter() - Create scatter plot
+1. load_csv(path) - Load a CSV file from the filesystem.
+2. get_columns() - Get all column names in the dataset
+3. summary() - Get comprehensive dataset summary
+4. average(column) - Calculate average of a numeric column
+5. maximum(column) - Find maximum value in a column
+6. plot_bar(x_column, y_column, title) - Create bar chart
+7. plot_histogram(column, bins) - Create histogram
+8. plot_scatter(x_column, y_column) - Create scatter plot
 9. correlation_matrix() - Generate correlation heatmap
 10. generate_full_visualization() - Generate ALL visualizations at once
 11. create_dashboard() - Create comprehensive dashboard
 
-**VISUALIZATION COMMANDS:**
-- "visualize all" or "generate full visualization" → Use generate_full_visualization()
-- "show dashboard" → Use create_dashboard()  
-- "plot x vs y" → Use plot_bar() or plot_scatter()
-- "histogram of column" → Use plot_histogram()
-- "correlation" → Use correlation_matrix()
+**CURRENT STATUS:** {'✅ Data is ready for analysis and visualization!' if data_loaded else '⏳ No data loaded yet. Please load a CSV file first.'}"""
 
-**RESPONSE RULES:**
-1. ALWAYS call get_columns() before suggesting columns
-2. When user asks for visualization, suggest appropriate columns
-3. For "visualize all", use generate_full_visualization()
-4. Always show generated file paths
-
-**REMEMBER:** 
-{'Data is ready for analysis and visualization!' if self.data_loaded else 'Waiting for data to be loaded.'}
-"""
-    
-    async def process_query(self, query: str):
-        """Process user query with context awareness"""
-        if not self.agent:
-            return "Agent not initialized. Please restart."
-        
-        # Check for visualization commands
-        lower_query = query.lower()
-        if "visualize all" in lower_query or "generate full visualization" in lower_query or "show all charts" in lower_query:
-            if not self.data_loaded:
-                return "⚠️ No data loaded. Please load a CSV first using 'load data.csv'"
-            # Force using the specific tool
-            query = "Use generate_full_visualization() tool to create all visualizations"
-        
-        if "dashboard" in lower_query and ("show" in lower_query or "create" in lower_query or "generate" in lower_query):
-            if not self.data_loaded:
-                return "⚠️ No data loaded. Please load a CSV first using 'load data.csv'"
-            query = "Use create_dashboard() tool to create a comprehensive dashboard"
-        
-        # Add user message to history
-        self.messages.append({"role": "user", "content": query})
-        
-        try:
-            # Process with current agent
-            response = await self.agent.ainvoke({"messages": self.messages})
-            assistant_message = response["messages"][-1]
-            self.messages.append(assistant_message)
-            
-            # Parse response to update state
-            response_text = assistant_message.content
-            
-            # Check if CSV was loaded successfully
-            if "csv loaded successfully" in response_text.lower():
-                self.data_loaded = True
-                # Try to extract columns from response
-                try:
-                    import re
-                    columns_match = re.search(r'Columns: (.*?)(?:\n|$)', response_text, re.IGNORECASE)
-                    if columns_match:
-                        cols_str = columns_match.group(1)
-                        self.columns = [c.strip() for c in cols_str.split(',') if c.strip()]
-                except:
-                    pass
-                
-                # Recreate agent with updated state
-                self.agent = create_agent(
-                    model=self.agent.model,
-                    tools=self.tools,
-                    system_prompt=self._get_system_prompt()
-                )
-            
-            return assistant_message.content
-            
-        except Exception as e:
-            print(f"⚠️ Error processing query: {e}")
-            self.messages.pop()
-            return f"Error: {e}"
+        return [SystemMessage(content=system_prompt)] + state["messages"]
 
 
-async def main():
+ctx = ApplicationContext()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handles startup MCP connection and agent assembly."""
     try:
-        agent = DataAnalysisAgent()
-        await agent.initialize()
+        print("⏳ Connecting to MCP server...")
+        ctx.mcp_client = MultiServerMCPClient(
+            {
+                "data-analysis": {
+                    "command": "python",
+                    "args": ["server.py"],
+                    "transport": "stdio",
+                    "env": {"PYTHONUNBUFFERED": "1"}
+                }
+            }
+        )
         
-        print("\n" + "="*70)
-        print("🤖 DATA ANALYSIS AGENT WITH COMPREHENSIVE VISUALIZATION")
-        print("="*70)
-        print("\n📊 Commands:")
-        print("  • 'load data.csv' - Load a CSV file")
-        print("  • 'show columns' - List all columns")
-        print("  • 'summary' - Get dataset summary")
-        print("  • 'average age' - Calculate average")
-        print("  • 'plot x vs y' - Create bar chart")
-        print("  • 'histogram age' - Create histogram")
-        print("  • 'correlation' - Show correlation matrix")
-        print("  • 'visualize all' - Generate ALL visualizations!")
-        print("  • 'show dashboard' - Create comprehensive dashboard")
-        print("  • 'exit' - Quit the program")
-        print("="*70)
-        print("\n💡 Tip: Use 'visualize all' to generate comprehensive colorful visualizations!\n")
+        ctx.tools = await asyncio.wait_for(ctx.mcp_client.get_tools(), timeout=30.0)
+        print("\n✅ Loaded Tools:")
+        for tool in ctx.tools:
+            print(f"  • {tool.name}")
+
+        llm = ChatOllama(model="llama3.2:3b", temperature=0, timeout=60)
         
-        while True:
-            try:
-                query = input("You: ")
-                
-                if query.lower() == "exit":
-                    break
-                
-                if not query.strip():
-                    continue
-                
-                response = await agent.process_query(query)
-                
-                print("\nAssistant:")
-                print(response)
-                print()
-                
-            except KeyboardInterrupt:
-                print("\n\n👋 Goodbye!")
-                break
-            except Exception as e:
-                print(f"\n⚠️ Error: {e}")
-                print("Please try again.\n")
-                
+        # Uses prompt instead of state_modifier, passing our subclassed AgentState schema
+        ctx.agent_executor = create_react_agent(
+            model=llm,
+            tools=ctx.tools,
+            checkpointer=ctx.memory,
+            prompt=ctx.dynamic_prompt_builder,  
+            state_schema=AgentState
+        )
+        print("\n✅ LangGraph Thread-Controlled Agent Initialized Successfully!")
+        yield
     except Exception as e:
-        print(f"\n❌ Fatal error: {e}")
-        print("\nTroubleshooting tips:")
-        print("1. Make sure server.py is in the same directory")
-        print("2. Check dependencies:")
-        print("   pip install fastmcp pandas matplotlib seaborn langchain langchain-mcp-adapters langchain-ollama")
-        sys.exit(1)
+        print(f"\n❌ Lifecycle Initialization Failed: {e}")
+        raise
+
+
+app = FastAPI(title="Data Analysis Agent API", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class QueryRequest(BaseModel):
+    query: str
+    thread_id: str
+    path: str
+
+class QueryResponse(BaseModel):
+    response: str
+    thread_id: str
+    data_loaded: bool
+    columns: List[str]
+
+
+@app.post("/chat", response_model=QueryResponse)
+async def process_agent_query(payload: QueryRequest):
+    if not ctx.agent_executor:
+        raise HTTPException(status_code=503, detail="Agent pipeline offline.")
+
+    thread_id = payload.thread_id
+    query = payload.query
+    
+
+    try:
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        # Pull state from checkpointer
+        current_state = await ctx.agent_executor.aget_state(config)
+        
+        if not current_state.values:
+            init_values = {
+                "messages": [("user", query)],
+                "data_loaded": False,
+                "columns": [],
+                "dataset_path": None
+            }
+        else:
+            init_values = {"messages": [("user", query)]}
+
+        # Invoke the workflow graph
+        result = await ctx.agent_executor.ainvoke(init_values, config=config)
+        assistant_message = result["messages"][-1].content
+        
+        # Update thread parameters in the checkpointer if tool outputs indicate file loaded successfully
+        if "csv loaded successfully" in assistant_message.lower() or "successfully loaded" in assistant_message.lower():
+            columns = []
+            columns_match = re.search(r'Columns: (.*?)(?:\n|$)', assistant_message, re.IGNORECASE)
+            if columns_match:
+                columns = [c.strip() for c in columns_match.group(1).split(',') if c.strip()]
+            
+            path_match = re.search(r'(?:load_csv|load)\s+([^\s]+.csv)', query, re.IGNORECASE)
+            inferred_path = path_match.group(1) if path_match else None
+            
+            await ctx.agent_executor.aupdate_state(
+                config,
+                {
+                    "data_loaded": True,
+                    "columns": columns,
+                    "dataset_path": inferred_path
+                }
+            )
+
+        # Retrieve the updated state values directly from the thread memory
+        updated_state = await ctx.agent_executor.aget_state(config)
+        
+        return QueryResponse(
+            response=assistant_message,
+            thread_id=thread_id,
+            data_loaded=updated_state.values.get("data_loaded", False),
+            columns=updated_state.values.get("columns", [])
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import uvicorn
+    uvicorn.run("cleint:app", host="0.0.0.0", port=8001, reload=False)
