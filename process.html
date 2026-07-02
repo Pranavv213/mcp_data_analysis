@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>📊 Data Analysis Agent · Chat</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📊 Data Analysis Agent · Upload & Chat</title>
   <!-- Font Awesome for icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
   <style>
     * {
       margin: 0;
@@ -23,8 +23,8 @@
       padding: 1.5rem;
     }
 
-    .chat-container {
-      max-width: 900px;
+    .app-wrapper {
+      max-width: 1000px;
       width: 100%;
       background: rgba(255, 255, 255, 0.75);
       backdrop-filter: blur(12px);
@@ -106,6 +106,85 @@
       background: #b0c9d9;
     }
 
+    /* upload area */
+    .upload-area {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.8rem 1.2rem;
+      background: rgba(255, 255, 255, 0.4);
+      backdrop-filter: blur(4px);
+      padding: 0.8rem 1.4rem;
+      border-radius: 60px;
+      margin: 0.5rem 0 1.2rem 0;
+      border: 1px solid rgba(255,255,255,0.5);
+      box-shadow: inset 0 1px 4px rgba(0,0,0,0.02);
+    }
+    .upload-area label {
+      font-weight: 500;
+      color: #1f5775;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .upload-area input[type="file"] {
+      border: 1px solid #cbdae6;
+      padding: 0.3rem 0.6rem;
+      border-radius: 40px;
+      background: white;
+      font-size: 0.8rem;
+      flex: 1;
+      min-width: 160px;
+    }
+    .upload-area input[type="file"]::file-selector-button {
+      background: #d4e3ed;
+      border: none;
+      padding: 0.3rem 1rem;
+      border-radius: 40px;
+      font-weight: 500;
+      color: #1b4f6e;
+      margin-right: 0.8rem;
+      cursor: pointer;
+      transition: 0.15s;
+    }
+    .upload-area input[type="file"]::file-selector-button:hover {
+      background: #bfd7e5;
+    }
+    .upload-btn {
+      background: #1d5c7a;
+      border: none;
+      color: white;
+      font-weight: 500;
+      padding: 0.5rem 1.6rem;
+      border-radius: 40px;
+      font-size: 0.85rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      transition: 0.15s;
+      box-shadow: 0 4px 8px rgba(26, 80, 110, 0.15);
+      border: 1px solid rgba(255,255,255,0.1);
+      white-space: nowrap;
+    }
+    .upload-btn:hover {
+      background: #134b63;
+      transform: scale(1.01);
+      box-shadow: 0 8px 16px rgba(26, 80, 110, 0.25);
+    }
+    .upload-btn:active {
+      transform: scale(0.97);
+    }
+    .upload-status {
+      font-size: 0.85rem;
+      color: #2a5a76;
+      margin-left: 0.2rem;
+    }
+    .upload-status i {
+      margin-right: 0.3rem;
+    }
+
     /* chat messages */
     .messages-box {
       background: rgba(255, 255, 255, 0.5);
@@ -113,8 +192,8 @@
       -webkit-backdrop-filter: blur(4px);
       border-radius: 1.8rem;
       padding: 1.6rem 1.2rem;
-      max-height: 420px;
-      min-height: 280px;
+      max-height: 380px;
+      min-height: 220px;
       overflow-y: auto;
       margin: 1.2rem 0 1.5rem;
       border: 1px solid rgba(255, 255, 255, 0.6);
@@ -314,8 +393,11 @@
       border-radius: 10px;
     }
 
-    @media (max-width: 600px) {
-      .chat-container { padding: 1.2rem; }
+    @media (max-width: 650px) {
+      .app-wrapper { padding: 1.2rem; }
+      .upload-area { flex-direction: column; align-items: stretch; background: transparent; padding: 0; border: none; box-shadow: none; gap: 0.6rem; }
+      .upload-area input[type="file"] { width: 100%; }
+      .upload-btn { justify-content: center; }
       .input-area { flex-wrap: wrap; background: transparent; padding: 0; border: none; box-shadow: none; gap: 0.5rem; }
       .input-area input { background: white; padding: 0.9rem 1.2rem; border-radius: 40px; border: 1px solid #cddee9; width: 100%; }
       .input-area button { width: 100%; justify-content: center; }
@@ -323,7 +405,7 @@
   </style>
 </head>
 <body>
-<div class="chat-container">
+<div class="app-wrapper">
   <h1>
     <i class="fas fa-robot"></i> Data Analyst
     <span style="font-size: 0.7rem; font-weight: 400; margin-left: auto; background: #dce8f0; padding: 0.2rem 0.9rem; border-radius: 30px; color: #1b4f6e;">
@@ -338,6 +420,14 @@
       <span class="status-dot idle" id="statusDot"></span>
       <span id="statusLabel">Idle</span>
     </div>
+  </div>
+
+  <!-- UPLOAD AREA (merged from CSV upload) -->
+  <div class="upload-area">
+    <label for="fileInput"><i class="fas fa-cloud-upload-alt"></i> CSV File</label>
+    <input type="file" id="fileInput" accept=".csv" />
+    <button class="upload-btn" id="uploadBtn"><i class="fas fa-upload"></i> Upload</button>
+    <span class="upload-status" id="uploadStatus"><i class="far fa-circle"></i> Ready</span>
   </div>
 
   <!-- messages -->
@@ -386,8 +476,14 @@
     const dataLoadedStatus = document.getElementById('dataLoadedStatus');
     const columnsDisplay = document.getElementById('columnsDisplay');
 
+    // Upload elements
+    const fileInput = document.getElementById('fileInput');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadStatus = document.getElementById('uploadStatus');
+
     // API base (adjust if backend is not on localhost:8000)
     const API_BASE = 'http://localhost:8001';
+    const UPLOAD_URL = 'http://127.0.0.1:8080/upload';  // as per original upload
 
     // simple message store for UI
     let currentThreadId = 'default';
@@ -412,7 +508,6 @@
 
     // add message to UI
     function appendMessage(role, content) {
-      // remove empty-state if present
       const empty = messageBox.querySelector('.empty-state');
       if (empty) empty.remove();
 
@@ -421,7 +516,6 @@
       const contentSpan = document.createElement('div');
       contentSpan.innerText = content;
       msgDiv.appendChild(contentSpan);
-      // optional meta
       const meta = document.createElement('div');
       meta.className = 'msg-meta';
       const now = new Date();
@@ -431,19 +525,16 @@
       messageBox.scrollTop = messageBox.scrollHeight;
     }
 
-    // clear chat (UI only)
     function clearChat() {
       messageBox.innerHTML = `<div class="empty-state"><i class="fas fa-comment-dots" style="margin-right: 6px;"></i> Start a new conversation.</div>`;
     }
 
-    // reset thread: update thread id, clear chat, reset status
     function resetThread(newThreadId) {
       if (newThreadId) {
         currentThreadId = newThreadId;
         threadInput.value = newThreadId;
         threadDisplay.innerText = newThreadId;
       } else {
-        // generate random thread
         const rand = 'thread-' + Math.random().toString(36).substring(2, 8);
         currentThreadId = rand;
         threadInput.value = rand;
@@ -451,10 +542,51 @@
       }
       clearChat();
       setStatus(false, []);
-      // also reset server state? the server will create new thread on next message.
     }
 
-    // send query to backend
+    // --- UPLOAD logic (merged from original) ---
+    async function uploadFile() {
+      if (!fileInput.files.length) {
+        uploadStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Please select a file first.';
+        return;
+      }
+
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append("file", file);  // must match FastAPI parameter name
+
+      uploadBtn.disabled = true;
+      uploadBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Uploading...';
+      uploadStatus.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Sending...';
+
+      try {
+        const response = await fetch(UPLOAD_URL, {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+          uploadStatus.innerHTML = `<i class="fas fa-check-circle" style="color: #1f9d8a;"></i> Uploaded: ${data.filename || 'OK'}`;
+          appendMessage('assistant', `📁 File uploaded successfully: **${data.filename || 'CSV'}**. You can now ask questions about it.`);
+          // optionally, we could call the agent to load the file? but we let the user use the chat.
+        } else {
+          uploadStatus.innerHTML = `<i class="fas fa-times-circle" style="color: #b13e3e;"></i> Upload failed (${response.status})`;
+          appendMessage('assistant', `❌ Upload error: ${data.detail || data.message || 'Server error'}`);
+        }
+        console.log(data);
+      } catch (error) {
+        console.error(error);
+        uploadStatus.innerHTML = `<i class="fas fa-times-circle" style="color: #b13e3e;"></i> Network error`;
+        appendMessage('assistant', `❌ Could not reach upload server at ${UPLOAD_URL}. Make sure it's running.`);
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
+        // keep status message
+      }
+    }
+
+    // --- CHAT logic ---
     async function sendQuery() {
       const query = queryInput.value.trim();
       if (!query) {
@@ -462,15 +594,12 @@
         return;
       }
 
-      // get thread id from input
       const threadId = threadInput.value.trim() || 'default';
       if (threadId !== currentThreadId) {
         currentThreadId = threadId;
         threadDisplay.innerText = threadId;
-        // optional: clear chat on thread change? we keep it, but user can clear manually.
       }
 
-      // show user message
       appendMessage('user', query);
       queryInput.value = '';
       queryInput.disabled = true;
@@ -493,19 +622,16 @@
         }
 
         const data = await resp.json();
-        // data: { response, thread_id, data_loaded, columns }
         if (data.response) {
           appendMessage('assistant', data.response);
         } else {
           appendMessage('assistant', '⚠️ No response from agent.');
         }
 
-        // update status from server response
         const loaded = data.data_loaded || false;
         const cols = data.columns || [];
         setStatus(loaded, cols);
 
-        // if thread changed by server? we trust server but keep our thread display
         if (data.thread_id && data.thread_id !== currentThreadId) {
           currentThreadId = data.thread_id;
           threadInput.value = data.thread_id;
@@ -515,7 +641,6 @@
       } catch (err) {
         console.error('Chat error:', err);
         appendMessage('assistant', `❌ Error: ${err.message || 'Could not reach agent API. Ensure server is running on port 8000.'}`);
-        // keep status as is
       } finally {
         queryInput.disabled = false;
         sendBtn.disabled = false;
@@ -535,29 +660,36 @@
 
     resetThreadBtn.addEventListener('click', () => {
       const newId = prompt('Enter new thread ID (or leave blank for random):', '');
-      if (newId === null) return; // cancel
+      if (newId === null) return;
       resetThread(newId.trim() || undefined);
     });
 
     clearChatBtn.addEventListener('click', clearChat);
 
-    // thread input manual change -> update display, but don't reset chat
     threadInput.addEventListener('change', () => {
       const val = threadInput.value.trim() || 'default';
       currentThreadId = val;
       threadDisplay.innerText = val;
     });
 
+    // Upload events
+    uploadBtn.addEventListener('click', uploadFile);
+    fileInput.addEventListener('change', function() {
+      if (this.files.length) {
+        uploadStatus.innerHTML = `<i class="far fa-file-alt"></i> ${this.files[0].name}`;
+      } else {
+        uploadStatus.innerHTML = '<i class="far fa-circle"></i> Ready';
+      }
+    });
+
     // initial status
     setStatus(false, []);
-
-    // on load, set thread display
     threadDisplay.innerText = currentThreadId;
 
-    // small welcome from assistant (only if empty)
+    // welcome message
     setTimeout(() => {
       if (messageBox.querySelector('.empty-state')) {
-        appendMessage('assistant', '👋 Hello! I’m your data analysis agent. Load a CSV with `load_csv("filename.csv")` or ask about data.');
+        appendMessage('assistant', '👋 Hello! I’m your data analysis agent. Load a CSV with the uploader above, or use `load_csv("filename.csv")` in chat.');
       }
     }, 300);
   })();
