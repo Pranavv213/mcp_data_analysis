@@ -129,13 +129,14 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     query: str
     thread_id: str
-    path: str
+    # NO path field here - it will be extracted from query
 
 class QueryResponse(BaseModel):
     response: str
     thread_id: str
     data_loaded: bool
     columns: List[str]
+    dataset_path: Optional[str] = None  # This will be "house.csv"
 
 
 @app.post("/chat", response_model=QueryResponse)
@@ -167,6 +168,23 @@ async def process_agent_query(payload: QueryRequest):
         result = await ctx.agent_executor.ainvoke(init_values, config=config)
         assistant_message = result["messages"][-1].content
         
+        # Extract filename from query - this will get "house.csv"
+        filename = None
+        
+        # Look for filename with .csv extension
+        csv_match = re.search(r'([a-zA-Z0-9_\-\.]+\.csv)', query, re.IGNORECASE)
+        if csv_match:
+            filename = csv_match.group(1)  # This will be "house.csv"
+        else:
+            # If no .csv found, look for filename after 'load'
+            load_match = re.search(r'load(?:_csv)?\s+([a-zA-Z0-9_\-\.]+)', query, re.IGNORECASE)
+            if load_match:
+                potential_file = load_match.group(1)
+                if potential_file.endswith('.csv'):
+                    filename = potential_file
+                else:
+                    filename = f"{potential_file}.csv"
+        
         # Update thread parameters in the checkpointer if tool outputs indicate file loaded successfully
         if "csv loaded successfully" in assistant_message.lower() or "successfully loaded" in assistant_message.lower():
             columns = []
@@ -174,15 +192,15 @@ async def process_agent_query(payload: QueryRequest):
             if columns_match:
                 columns = [c.strip() for c in columns_match.group(1).split(',') if c.strip()]
             
-            path_match = re.search(r'(?:load_csv|load)\s+([^\s]+.csv)', query, re.IGNORECASE)
-            inferred_path = path_match.group(1) if path_match else None
+            # Set the path to the extracted filename (will be "house.csv")
+            inferred_path = filename if filename else "unknown.csv"
             
             await ctx.agent_executor.aupdate_state(
                 config,
                 {
                     "data_loaded": True,
                     "columns": columns,
-                    "dataset_path": inferred_path
+                    "dataset_path": inferred_path  # This will be "house.csv"
                 }
             )
 
@@ -193,7 +211,8 @@ async def process_agent_query(payload: QueryRequest):
             response=assistant_message,
             thread_id=thread_id,
             data_loaded=updated_state.values.get("data_loaded", False),
-            columns=updated_state.values.get("columns", [])
+            columns=updated_state.values.get("columns", []),
+            dataset_path=updated_state.values.get("dataset_path", None)  # Returns "house.csv"
         )
 
     except Exception as e:
